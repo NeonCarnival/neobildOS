@@ -59,40 +59,19 @@ jobs:
 
       - name: List available ninja targets
         run: |
+          TARGETS=$(cd llama.cpp && ninja -C build -t targets all 2>/dev/null | head -50)
+          echo "=== Available ninja targets ==="
+          echo "$TARGETS"
+          echo "=== End target list ==="
           echo "## Available ninja targets" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          cd llama.cpp && ninja -C build -t targets all 2>/dev/null | head -50 >> $GITHUB_STEP_SUMMARY
+          echo "$TARGETS" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Build
         run: |
           cd llama.cpp
-
-          # Detect server target
-          if ninja -C build -t targets all 2>/dev/null | grep -q "^llama-server:"; then
-            SERVER_TARGET="llama-server"
-          else
-            SERVER_TARGET="server"
-          fi
-          echo "SERVER_TARGET=$SERVER_TARGET" >> $GITHUB_ENV
-          echo "Building server target: $SERVER_TARGET"
-          cmake --build build --target "$SERVER_TARGET" -j$(nproc)
-
-          # Detect bench target (optional — missing bench does not fail the build)
-          if ninja -C build -t targets all 2>/dev/null | grep -q "^llama-bench:"; then
-            BENCH_TARGET="llama-bench"
-          elif ninja -C build -t targets all 2>/dev/null | grep -q "^llama-benchmark:"; then
-            BENCH_TARGET="llama-benchmark"
-          else
-            BENCH_TARGET=""
-          fi
-          echo "BENCH_TARGET=$BENCH_TARGET" >> $GITHUB_ENV
-          if [ -n "$BENCH_TARGET" ]; then
-            echo "Building bench target: $BENCH_TARGET"
-            cmake --build build --target "$BENCH_TARGET" -j$(nproc) || true
-          else
-            echo "No bench target found — skipping"
-          fi
+          cmake --build build -j$(nproc)
 
       - name: Check TQ3_0 support
         run: |
@@ -115,8 +94,6 @@ jobs:
           Source: ${{ env.LLAMA_SOURCE }}
           TQ3_0: ${{ env.TQ3_0_PRESENT }}
           Target: aarch64 ARMv8-A+dotprod+i8mm
-          Server target: ${{ env.SERVER_TARGET }}
-          Bench target: ${{ env.BENCH_TARGET }}
           MANIFEST
           tar -czf llama-tq3-arm64.tar.gz -C release .
 
