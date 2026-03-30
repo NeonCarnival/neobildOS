@@ -42,8 +42,6 @@ jobs:
         run: |
           cd llama.cpp
           cmake \
-            -DCMAKE_SYSTEM_NAME=Android \
-            -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
             -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
             -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
             -DCMAKE_C_FLAGS="-O3 -march=armv8-a+dotprod+i8mm" \
@@ -53,6 +51,7 @@ jobs:
             -DGGML_LLAMAFILE=OFF \
             -DLLAMA_BUILD_TOOLS=OFF \
             -DLLAMA_BUILD_TESTS=OFF \
+            -DLLAMA_MMAP=OFF \
             -DCMAKE_BUILD_TYPE=Release \
             -G Ninja \
             -B build
