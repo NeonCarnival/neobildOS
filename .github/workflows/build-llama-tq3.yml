@@ -1,0 +1,92 @@
+name: build-llama-tq3-arm64
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/build-llama-tq3.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout neobildOS
+        uses: actions/checkout@v4
+
+      - name: Clone llama.cpp (TQ3_0 branch)
+        run: |
+          if git clone --depth=1 \
+               --branch turboquant-tq3_0 \
+               https://github.com/Aaryan-Kapoor/llama.cpp \
+               llama.cpp 2>/dev/null; then
+            echo "LLAMA_SOURCE=turboquant-tq3_0" >> $GITHUB_ENV
+          else
+            echo "TQ3_0 unavailable - falling back to upstream"
+            git clone --depth=1 https://github.com/ggml-org/llama.cpp llama.cpp
+            echo "LLAMA_SOURCE=upstream" >> $GITHUB_ENV
+          fi
+
+      - name: Install ARM64 cross-compile toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            gcc-aarch64-linux-gnu \
+            g++-aarch64-linux-gnu \
+            cmake \
+            ninja-build
+
+      - name: Configure cmake
+        run: |
+          cd llama.cpp
+          cmake \
+            -DCMAKE_SYSTEM_NAME=Android \
+            -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+            -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
+            -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
+            -DCMAKE_C_FLAGS="-O3 -march=armv8-a+dotprod+i8mm" \
+            -DCMAKE_CXX_FLAGS="-O3 -march=armv8-a+dotprod+i8mm" \
+            -DGGML_OPENMP=OFF \
+            -DGGML_NATIVE=OFF \
+            -DGGML_LLAMAFILE=OFF \
+            -DLLAMA_BUILD_TOOLS=OFF \
+            -DLLAMA_BUILD_TESTS=OFF \
+            -DCMAKE_BUILD_TYPE=Release \
+            -G Ninja \
+            -B build
+
+      - name: Build
+        run: |
+          cd llama.cpp
+          cmake --build build --target llama-server llama-bench -j$(nproc)
+
+      - name: Check TQ3_0 support
+        run: |
+          if strings llama.cpp/build/bin/llama-server | grep -q "tq3_0"; then
+            echo "TQ3_0_PRESENT=true" >> $GITHUB_ENV
+          else
+            echo "TQ3_0_PRESENT=false" >> $GITHUB_ENV
+          fi
+
+      - name: Package
+        run: |
+          mkdir -p release
+          cp llama.cpp/build/bin/llama-server release/
+          cp llama.cpp/build/bin/llama-bench release/
+          cat > release/BUILD_INFO.txt << MANIFEST
+          neobildOS llama.cpp build
+          Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+          Source: ${{ env.LLAMA_SOURCE }}
+          TQ3_0: ${{ env.TQ3_0_PRESENT }}
+          Target: aarch64 ARMv8-A+dotprod+i8mm
+          MANIFEST
+          tar -czf llama-tq3-arm64.tar.gz -C release .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: llama-tq3-arm64
+          path: llama-tq3-arm64.tar.gz
+          retention-days: 30
