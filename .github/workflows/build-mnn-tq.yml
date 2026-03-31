@@ -16,17 +16,15 @@ jobs:
         run: |
           git clone --depth=1 https://github.com/alibaba/MNN MNN
           cd MNN && git log --oneline -3
-          git log --oneline | grep -q "244f5d1" && echo "TQ_PRESENT=true" >> $GITHUB_ENV || echo "TQ_PRESENT=false" >> $GITHUB_ENV
 
       - name: Install ARM64 toolchain
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu cmake ninja-build
 
-      - name: Build MNN + llm_demo (ARM64 Termux)
+      - name: Build MNN llm_demo (ARM64 Termux)
         run: |
-          cd MNN
-          mkdir build && cd build
+          cd MNN && mkdir build && cd build
           cmake .. \
             -DCMAKE_SYSTEM_NAME=Linux \
             -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
@@ -46,25 +44,14 @@ jobs:
             -G Ninja
           cmake --build . --target MNN mnn_llm -j$(nproc)
 
-      - name: Verify + package
+      - name: Package
         run: |
           mkdir -p release
-          find MNN/build -type f -executable | while read f; do
-            cp "$f" release/ 2>/dev/null || true
-          done
-          find MNN/build -name "*.so*" | while read f; do
-            cp "$f" release/ 2>/dev/null || true
-          done
-          cat > release/BUILD_INFO.txt << MANIFEST
-          neobildOS MNN TurboQuant build
-          Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)
-          TQ_IN_MNN: ${{ env.TQ_PRESENT }}
-          attention_mode=12: FlashAttention + TQ3 (3-bit KV)
-          attention_mode=14: FlashAttention + TQ4 (4-bit KV, recommended)
-          Target: aarch64 ARMv8-A+dotprod+i8mm
-          MANIFEST
+          find MNN/build -type f -executable | while read f; do cp "$f" release/ 2>/dev/null || true; done
+          find MNN/build -name "*.so*" | while read f; do cp "$f" release/ 2>/dev/null || true; done
+          echo "attention_mode=14: TQ4 4-bit KV (recommended)" > release/BUILD_INFO.txt
+          echo "attention_mode=12: TQ3 3-bit KV (extreme)" >> release/BUILD_INFO.txt
           tar -czf mnn-tq-arm64.tar.gz -C release .
-          echo "Archive: $(du -sh mnn-tq-arm64.tar.gz)"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
